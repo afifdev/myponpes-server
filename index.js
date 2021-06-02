@@ -6,7 +6,7 @@ const cors = require("cors");
 const app = express();
 const dotenv = require("dotenv");
 dotenv.config();
-const { adminRoutes } = require("./routes");
+const { adminRoutes, santriRoutes } = require("./routes");
 
 // config
 app.use(cors());
@@ -16,6 +16,7 @@ app.use("/images", express.static(path.join(__dirname, "images")));
 
 // routes
 app.use("/api/admin", adminRoutes);
+app.use("/api/santri", santriRoutes);
 app.use((err, req, res, next) => {
   if (req.file) {
     fs.unlinkSync(path.join(__dirname, `./${req.file.path}`));

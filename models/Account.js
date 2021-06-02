@@ -1,8 +1,9 @@
-const { Schema, model } = require("mongoose");
+const mongoose = require("mongoose");
+const Int32 = require("mongoose-int32").loadType(mongoose);
 
-const Account = new Schema({
-  balance: String,
+const Account = new mongoose.Schema({
+  balance: Int32,
   date: String,
 });
 
-module.exports = model("Account", Account);
+module.exports = mongoose.model("Account", Account);

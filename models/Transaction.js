@@ -1,10 +1,12 @@
-const { Schema, model } = require("mongoose");
+const mongoose = require("mongoose");
+const Int32 = require("mongoose-int32").loadType(mongoose);
 
-const Transaction = new Schema({
+const Transaction = new mongoose.Schema({
+  title: String,
   is_debit: Boolean,
   date: String,
-  amount: String,
+  amount: Int32,
   ref_code: String,
 });
 
-module.exports = model("Transaction", Transaction);
+module.exports = mongoose.model("Transaction", Transaction);

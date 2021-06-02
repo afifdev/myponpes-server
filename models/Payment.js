@@ -1,14 +1,15 @@
-const { Schema, model } = require("mongoose");
+const mongoose = require("mongoose");
+const Int32 = require("mongoose-int32").loadType(mongoose);
 
-const Payment = new Schema({
+const Payment = new mongoose.Schema({
   title: String,
   desc: String,
-  amount: String,
+  amount: Int32,
   due_date: String,
   ref_code: String,
   is_spp: Boolean,
   is_complete: Boolean,
-  santris: [
+  santri: [
     {
       santri_id: String,
       payment_date: String,
@@ -18,4 +19,4 @@ const Payment = new Schema({
   ],
 });
 
-module.exports = model("Payment", Payment);
+module.exports = mongoose.model("Payment", Payment);

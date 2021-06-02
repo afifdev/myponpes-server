@@ -432,14 +432,14 @@ const createTransaction = async (req, res, next) => {
     const transaction = new Transaction({
       title: body.title,
       is_debit: body.is_debit === "1",
-      date: new Date().toString().split("T")[0],
+      date: new Date().toISOString().split("T")[0],
       amount: body.amount,
     });
     const saveTransaction = await transaction.save();
     if (!saveTransaction) {
       return next(new Error("Cannot save transaction"));
     }
-    if (account && account.date === new Date().toString().split("T")[0]) {
+    if (account && account.date === new Date().toISOString().split("T")[0]) {
       const updater = {
         balance:
           body.is_debit === "1"
@@ -466,7 +466,7 @@ const createTransaction = async (req, res, next) => {
       };
       const newAccount = new Account({
         ...updater,
-        date: new Date().toString().split("T")[0],
+        date: new Date().toISOString().split("T")[0],
       });
       const saveNewAccount = await newAccount.save();
       if (!saveNewAccount) {

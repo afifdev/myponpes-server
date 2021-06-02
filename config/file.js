@@ -26,9 +26,9 @@ const eventStorage = diskStorage({
     cb(null, new Date().getTime() + "-" + file.originalname);
   },
 });
-const transactionStorage = diskStorage({
+const paymentStorage = diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "images/transactions");
+    cb(null, "images/payments");
   },
   filename: (req, file, cb) => {
     cb(null, new Date().getTime() + "-" + file.originalname);
@@ -47,6 +47,6 @@ module.exports = {
   fileFilter,
   santriStorage,
   eventStorage,
-  transactionStorage,
+  paymentStorage,
   achievementStorage,
 };

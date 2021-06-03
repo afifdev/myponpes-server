@@ -352,8 +352,19 @@ const getPayment = async (req, res, next) => {
       },
       {
         $project: {
-          "santri.progress": 0,
-          "santri.password": 0,
+          title: 1,
+          desc: 1,
+          amount: 1,
+          due_date: 1,
+          ref_code: 1,
+          is_spp: 1,
+          is_complete: 1,
+          "santri.santri_id": 1,
+          "santri.name": 1,
+          "santri.image": 1,
+          "santri.payment_date": 1,
+          "santri.payment_image": 1,
+          "santri.is_complete": 1,
         },
       },
     ]);
@@ -384,16 +395,57 @@ const verifyPayment = async (req, res, next) => {
       return next(new Error("No santri found"));
     }
     const payment = await Payment.findOneAndUpdate(
-      { _id: id, "santris.santri_id": body.santri },
+      { _id: id, "santri.santri_id": body.santri },
       {
         $set: {
-          "santris.$.is_complete": true,
+          "santri.$.is_complete": true,
         },
       },
       { useFindAndModify: false }
     );
     if (!payment) {
       return next(new Error("Failed updating payment"));
+    }
+    const getSantriPayDate = payment.santri.find(
+      (s) => s.santri_id === body.santri
+    );
+
+    const newTrans = new Transaction({
+      title: payment.title,
+      is_debit: true,
+      date: getSantriPayDate.payment_date,
+      amount: payment.amount,
+      ref_code: payment.ref_code,
+    });
+    const saveNewTrans = await newTrans.save();
+    if (!saveNewTrans) {
+      return next(new Error("Error in saving to transaction"));
+    }
+
+    const prevAccount = await Account.find().sort({ _id: 1 });
+    if (
+      prevAccount[0] &&
+      prevAccount[0].date === new Date().toISOString().split("T")[0]
+    ) {
+      const updateAccount = await Account.findOneAndUpdate(
+        { _id: prevAccount[0]._id },
+        { balance: { $add: ["$balance", payment.amount] } },
+        { useFindAndModify: false }
+      );
+      if (!updateAccount) {
+        return next(new Error("Error in updating balance"));
+      }
+    } else {
+      const newAccount = new Account({
+        balance: prevAccount[0]
+          ? prevAccount[0].balance + payment.amount
+          : payment.amount,
+        date: new Date().toISOString().split("T")[0],
+      });
+      const saveNewAccount = await newAccount.save();
+      if (!saveNewAccount) {
+        return next(new Error("Error in updating balance"));
+      }
     }
     const checkComplete = payment.santri.map((s) => {
       if (!s.is_complete) {
@@ -409,8 +461,48 @@ const verifyPayment = async (req, res, next) => {
     }
     return res.json({
       message: "success",
-      data: payment,
     });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const rejectPayment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const body = req.body;
+    if (!body.santri) {
+      return next(new Error("Which santri need to vefiry?"));
+    }
+    if (!isValidObjectId(id) || !isValidObjectId(body.santri)) {
+      return next(new Error("Invalid identifier"));
+    }
+    const santri = await Santri.find({ _id: body.santri }, { _id: 1 });
+    if (!santri) {
+      return next(new Error("No santri found"));
+    }
+    const findImage = await Payment.findOne(
+      { _id: id, "santri.santri_id": body.santri },
+      { santri: { $elemMatch: { santri_id: body.santri } } }
+    );
+    const payment = await Payment.findOneAndUpdate(
+      { _id: id, "santri.santri_id": body.santri },
+      {
+        $set: {
+          "santri.$.is_complete": false,
+          "santri.$.payment_image": null,
+          "santri.$.payment_date": null,
+        },
+      },
+      { useFindAndModify: false }
+    );
+    if (!payment) {
+      return next(new Error("Failed updating payment"));
+    }
+    fs.unlinkSync(
+      path.join(__dirname, `../${findImage.santri[0].payment_image}`)
+    );
+    return res.json({ message: payment });
   } catch (err) {
     return next(err);
   }
@@ -490,5 +582,6 @@ module.exports = {
   getPayments,
   getPayment,
   verifyPayment,
+  rejectPayment,
   createTransaction,
 };

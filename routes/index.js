@@ -1,3 +1,4 @@
 const adminRoutes = require("./admin");
+const santriRoutes = require("./santri");
 
-module.exports = { adminRoutes };
+module.exports = { adminRoutes, santriRoutes };

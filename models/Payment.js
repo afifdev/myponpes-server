@@ -13,7 +13,7 @@ const Payment = new mongoose.Schema({
     {
       santri_id: String,
       payment_date: String,
-      image: String,
+      payment_image: String,
       is_complete: Boolean,
     },
   ],

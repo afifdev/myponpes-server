@@ -42,12 +42,19 @@ routes.post(
 
 routes.get("/payment", auth, adminAuth, adminControllers.getPayments);
 routes.get("/payment/:id", auth, adminAuth, adminControllers.getPayment);
-routes.post(
+routes.put(
   "/payment/:id/verify",
   formHandler,
   auth,
   adminAuth,
   adminControllers.verifyPayment
+);
+routes.put(
+  "/payment/:id/reject",
+  formHandler,
+  auth,
+  adminAuth,
+  adminControllers.rejectPayment
 );
 routes.post(
   "/transaction",

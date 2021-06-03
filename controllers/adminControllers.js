@@ -429,7 +429,7 @@ const verifyPayment = async (req, res, next) => {
     ) {
       const updateAccount = await Account.findOneAndUpdate(
         { _id: prevAccount[0]._id },
-        { balance: { $add: ["$balance", payment.amount] } },
+        { $inc: { balance: payment.amount } },
         { useFindAndModify: false }
       );
       if (!updateAccount) {

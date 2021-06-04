@@ -616,6 +616,25 @@ const getTransactions = async (req, res, next) => {
   }
 };
 
+const getTransaction = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return next(new Error("Invalid identifier"));
+    }
+    const transaction = await Transaction.findOne({ _id: id });
+    if (!transaction) {
+      return next(new Error("No transaction found"));
+    }
+    return res.json({
+      message: "success",
+      data: transaction,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   login,
   createSantri,
@@ -630,4 +649,5 @@ module.exports = {
   rejectPayment,
   createTransaction,
   getTransactions,
+  getTransaction,
 };

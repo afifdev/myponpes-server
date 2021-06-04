@@ -244,8 +244,9 @@ const createPayment = async (req, res, next) => {
         body.santri.push({ santri_id: santri._id });
       });
     } else {
-      const checkSantri = await Santri.find({ _id: { $in: body.santri } });
-      if (checkSantri.length !== body.santri.length) {
+      const santris = body.santri.map((s) => ObjectId(s));
+      const checkSantri = await Santri.find({ _id: { $in: santris } });
+      if (!checkSantri || !(checkSantri > 0)) {
         return next(new Error("Some santri not found"));
       }
     }

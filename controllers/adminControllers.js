@@ -422,7 +422,7 @@ const verifyPayment = async (req, res, next) => {
       return next(new Error("Error in saving to transaction"));
     }
 
-    const prevAccount = await Account.find().sort({ _id: 1 });
+    const prevAccount = await Account.find().sort({ _id: 1 }).limit(1);
     if (
       prevAccount[0] &&
       prevAccount[0].date === new Date().toISOString().split("T")[0]
@@ -516,8 +516,8 @@ const createTransaction = async (req, res, next) => {
     }
     body.amount = parseInt(body.amount);
     const account = await Account.find().sort({ _id: 1 }).limit(1);
-    if (body.is_debit !== "1" && account) {
-      if (!(account.balance > body.amount)) {
+    if (body.is_debit !== "1" && account[0]) {
+      if (!(account[0].balance > body.amount)) {
         return next(new Error("You will in debt"));
       }
     }
@@ -531,15 +531,18 @@ const createTransaction = async (req, res, next) => {
     if (!saveTransaction) {
       return next(new Error("Cannot save transaction"));
     }
-    if (account && account.date === new Date().toISOString().split("T")[0]) {
+    if (
+      account[0] &&
+      account[0].date === new Date().toISOString().split("T")[0]
+    ) {
       const updater = {
         balance:
           body.is_debit === "1"
-            ? account.balance + body.amount
-            : account.balance - body.amount,
+            ? account[0].balance + body.amount
+            : account[0].balance - body.amount,
       };
       const updatedAccount = await Account.findOneAndUpdate(
-        { _id: account._id },
+        { _id: account[0]._id },
         updater,
         { useFindAndModify: false }
       );
@@ -550,10 +553,10 @@ const createTransaction = async (req, res, next) => {
       return res.json({ message: "success" });
     } else {
       const updater = {
-        balance: account
+        balance: account[0]
           ? body.is_debit
-            ? account.balance + body.amount
-            : account.balance - body.amount
+            ? account[0].balance + body.amount
+            : account[0].balance - body.amount
           : body.amount,
       };
       const newAccount = new Account({

@@ -64,4 +64,6 @@ routes.post(
   adminControllers.createTransaction
 );
 
+routes.get("/transaction", auth, adminAuth, adminControllers.getTransactions);
+
 module.exports = routes;

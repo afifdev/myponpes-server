@@ -575,6 +575,47 @@ const createTransaction = async (req, res, next) => {
   }
 };
 
+const getTransactions = async (req, res, next) => {
+  try {
+    const skipper = parseInt(req.query.currentPage) || 1;
+    const limit = 10;
+    const count = await Transaction.countDocuments();
+    const { title } = req.query;
+
+    if (!title || title === "") {
+      const transactions = await Transaction.find()
+        .skip((skipper - 1) * limit)
+        .limit(limit);
+      if (transactions.length < 1) {
+        return next(new Error("Transactions not found"));
+      }
+      return res.json({
+        message: "success",
+        data: transactions,
+        dataLength: count,
+        next: count > skipper * limit,
+      });
+    }
+
+    const transactions = await Transaction.find({
+      title: { $regex: new RegExp(title) },
+    })
+      .skip((skipper - 1) * limit)
+      .limit(limit);
+    if (transactions.length < 1) {
+      return next(new Error("Transactions not found"));
+    }
+    return res.json({
+      message: "success",
+      data: transactions,
+      dataLength: count,
+      next: count > skipper * limit,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   login,
   createSantri,
@@ -588,4 +629,5 @@ module.exports = {
   verifyPayment,
   rejectPayment,
   createTransaction,
+  getTransactions,
 };

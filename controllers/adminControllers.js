@@ -517,8 +517,8 @@ const createTransaction = async (req, res, next) => {
     }
     body.amount = parseInt(body.amount);
     const account = await Account.find().sort({ _id: 1 }).limit(1);
-    if (body.is_debit !== "1" && account[0]) {
-      if (!(account[0].balance > body.amount)) {
+    if (body.is_debit !== "1") {
+      if (!account[0] || (account[0] && !(account[0].balance > body.amount))) {
         return next(new Error("You will in debt"));
       }
     }

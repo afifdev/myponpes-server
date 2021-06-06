@@ -635,6 +635,21 @@ const getTransaction = async (req, res, next) => {
   }
 };
 
+const getBalance = async (req, res, next) => {
+  try {
+    const account = await Account.find().sort({ _id: 1 }).limit(1);
+    if (account[0] && account.length > 0) {
+      return res.json({
+        message: "success",
+        data: account[0],
+      });
+    }
+    return next(new Error("Account still empty"));
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   login,
   createSantri,
@@ -650,4 +665,5 @@ module.exports = {
   createTransaction,
   getTransactions,
   getTransaction,
+  getBalance,
 };

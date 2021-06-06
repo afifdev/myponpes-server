@@ -71,5 +71,6 @@ routes.get(
   adminAuth,
   adminControllers.getTransaction
 );
+routes.get("/balance", auth, adminAuth, adminControllers.getBalance);
 
 module.exports = routes;

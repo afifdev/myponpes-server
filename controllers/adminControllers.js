@@ -79,9 +79,8 @@ const createSantri = async (req, res, next) => {
     ) {
       return next(new Error("Fields Error"));
     }
-    body.username = body.username.toLowerCase();
     const date = new Date();
-    body.date_in = date.toISOString().split("T")[0];
+    body.date_in = date.toISOString();
     body.level = body.level ? 1 : 0;
     body.image = req.file.path;
     body.gender = req.body.gender === "1";
@@ -91,6 +90,9 @@ const createSantri = async (req, res, next) => {
       ...body,
     });
     const saveSantri = await santri.save();
+    if (!saveSantri) {
+      return next(new Error("Couldn't save santri"));
+    }
     return res.json({
       message: "success",
     });
@@ -113,7 +115,7 @@ const updateSantri = async (req, res, next) => {
       body.progress ||
       body.payment
     ) {
-      return next(new Error("Unallowed fields"));
+      return next(new Error("Disallowed fields"));
     }
     if (req.file) {
       body.image = req.file.path;
@@ -143,7 +145,7 @@ const getSantris = async (req, res, next) => {
     const { username } = req.query;
 
     if (!username || username === "") {
-      const santris = await Santri.find()
+      const santris = await Santri.find({}, { progress: 0, password: 0 })
         .skip((skipper - 1) * limit)
         .limit(limit);
       if (santris.length < 1) {
@@ -252,6 +254,12 @@ const createPayment = async (req, res, next) => {
     }
     body.is_spp = body.is_spp === "1";
     body.amount = parseInt(body.amount);
+    const checkRefCodeExist = await Payment.findOne({
+      ref_code: body.ref_code,
+    });
+    if (checkRefCodeExist) {
+      return next(new Error("Ref Code already exist"));
+    }
     const payment = new Payment({
       ...body,
     });
@@ -274,6 +282,7 @@ const getPayments = async (req, res, next) => {
 
     if (!title || title === "") {
       const payments = await Payment.find({}, { santri: 0 })
+        .sort({ _id: -1 })
         .skip((skipper - 1) * limit)
         .limit(limit);
       if (payments.length < 1) {
@@ -293,6 +302,7 @@ const getPayments = async (req, res, next) => {
       },
       { santri: 0 }
     )
+      .sort({ _id: 1 })
       .skip((skipper - 1) * limit)
       .limit(limit);
     if (payments.length < 1) {
@@ -386,7 +396,7 @@ const verifyPayment = async (req, res, next) => {
     const { id } = req.params;
     const body = req.body;
     if (!body.santri) {
-      return next(new Error("Which santri need to vefiry?"));
+      return next(new Error("Which santri need to verify?"));
     }
     if (!isValidObjectId(id) || !isValidObjectId(body.santri)) {
       return next(new Error("Invalid identifier"));
@@ -423,10 +433,11 @@ const verifyPayment = async (req, res, next) => {
       return next(new Error("Error in saving to transaction"));
     }
 
-    const prevAccount = await Account.find().sort({ _id: 1 }).limit(1);
+    const prevAccount = await Account.find().sort({ _id: -1 }).limit(1);
     if (
       prevAccount[0] &&
-      prevAccount[0].date === new Date().toISOString().split("T")[0]
+      prevAccount[0].date.split("T")[0] ===
+        new Date().toISOString().split("T")[0]
     ) {
       const updateAccount = await Account.findOneAndUpdate(
         { _id: prevAccount[0]._id },
@@ -441,7 +452,7 @@ const verifyPayment = async (req, res, next) => {
         balance: prevAccount[0]
           ? prevAccount[0].balance + payment.amount
           : payment.amount,
-        date: new Date().toISOString().split("T")[0],
+        date: new Date().toISOString(),
       });
       const saveNewAccount = await newAccount.save();
       if (!saveNewAccount) {
@@ -512,20 +523,23 @@ const rejectPayment = async (req, res, next) => {
 const createTransaction = async (req, res, next) => {
   try {
     const body = req.body;
-    if (!body.title || !body.is_debit || !body.amount) {
+    if (!body.title || !body.amount || ![1, 0].includes(body.is_debit)) {
       return next(new Error("Please fills out the fields"));
     }
     body.amount = parseInt(body.amount);
     const account = await Account.find().sort({ _id: 1 }).limit(1);
-    if (body.is_debit !== "1") {
-      if (!account[0] || (account[0] && !(account[0].balance > body.amount))) {
+    if (body.is_debit !== 1) {
+      if (
+        account.length < 1 ||
+        (account[0] && !(account[0].balance > body.amount))
+      ) {
         return next(new Error("You will in debt"));
       }
     }
     const transaction = new Transaction({
       title: body.title,
-      is_debit: body.is_debit === "1",
-      date: new Date().toISOString().split("T")[0],
+      is_debit: body.is_debit === 1,
+      date: new Date().toISOString(),
       amount: body.amount,
     });
     const saveTransaction = await transaction.save();
@@ -534,11 +548,11 @@ const createTransaction = async (req, res, next) => {
     }
     if (
       account[0] &&
-      account[0].date === new Date().toISOString().split("T")[0]
+      account[0].date.split("T")[0] === new Date().toISOString().split("T")[0]
     ) {
       const updater = {
         balance:
-          body.is_debit === "1"
+          body.is_debit === 1
             ? account[0].balance + body.amount
             : account[0].balance - body.amount,
       };
@@ -562,7 +576,7 @@ const createTransaction = async (req, res, next) => {
       };
       const newAccount = new Account({
         ...updater,
-        date: new Date().toISOString().split("T")[0],
+        date: new Date().toISOString(),
       });
       const saveNewAccount = await newAccount.save();
       if (!saveNewAccount) {
@@ -584,6 +598,7 @@ const getTransactions = async (req, res, next) => {
 
     if (!title || title === "") {
       const transactions = await Transaction.find()
+        .sort({ _id: -1 })
         .skip((skipper - 1) * limit)
         .limit(limit);
       if (transactions.length < 1) {
@@ -600,6 +615,7 @@ const getTransactions = async (req, res, next) => {
     const transactions = await Transaction.find({
       title: { $regex: new RegExp(title) },
     })
+      .sort({ _id: -1 })
       .skip((skipper - 1) * limit)
       .limit(limit);
     if (transactions.length < 1) {
@@ -637,12 +653,22 @@ const getTransaction = async (req, res, next) => {
 
 const getBalance = async (req, res, next) => {
   try {
-    const account = await Account.find().sort({ _id: 1 }).limit(1);
-    if (account[0] && account.length > 0) {
-      return res.json({
-        message: "success",
-        data: account[0],
-      });
+    if (req.query.last) {
+      const account = await Account.find().sort({ _id: -1 }).limit(1);
+      if (account[0] && account.length > 0) {
+        return res.json({
+          message: "success",
+          data: account[0],
+        });
+      }
+    } else {
+      const accounts = await Account.find().limit(10);
+      if (accounts.length > 0) {
+        return res.json({
+          message: "success",
+          data: accounts,
+        });
+      }
     }
     return next(new Error("Account still empty"));
   } catch (err) {

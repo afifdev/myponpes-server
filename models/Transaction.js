@@ -6,7 +6,6 @@ const Transaction = new mongoose.Schema({
   is_debit: Boolean,
   date: String,
   amount: Int32,
-  ref_code: String,
 });
 
 module.exports = mongoose.model("Transaction", Transaction);

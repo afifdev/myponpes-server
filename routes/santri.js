@@ -11,6 +11,14 @@ const uploadHandler = multer({
 }).single("image");
 
 routes.post("/login", formHandler, santriControllers.login);
+routes.get("/myself", auth, santriAuth, santriControllers.getMySelf);
+
+routes.get("/hafalan", auth, santriAuth, santriControllers.getHafalan);
+routes.get("/jamaah", auth, santriAuth, santriControllers.getJamaah);
+routes.get("/achievement", auth, santriAuth, santriControllers.getAchievement);
+routes.get("/returning", auth, santriAuth, santriControllers.getReturning);
+
+routes.get("/event", auth, santriAuth, santriControllers.getEvents);
 
 // Payment
 routes.get("/payment", auth, santriAuth, santriControllers.getPayments);

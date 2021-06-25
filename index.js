@@ -6,7 +6,7 @@ const cors = require("cors");
 const app = express();
 const dotenv = require("dotenv");
 dotenv.config();
-const { adminRoutes, santriRoutes } = require("./routes");
+const { adminRoutes, santriRoutes, levelRoutes } = require("./routes");
 
 // config
 app.use(cors());
@@ -17,9 +17,15 @@ app.use("/images", express.static(path.join(__dirname, "images")));
 // routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/santri", santriRoutes);
+app.use("/api/level", levelRoutes);
 app.use((err, req, res, next) => {
   if (req.file) {
     fs.unlinkSync(path.join(__dirname, `./${req.file.path}`));
+  }
+  if (req.files) {
+    req.files.map((i) => {
+      fs.unlinkSync(path.join(__dirname, `./${i.path}`));
+    });
   }
   res.json({
     errors: err.message ? err.message : "Please using API carefully",

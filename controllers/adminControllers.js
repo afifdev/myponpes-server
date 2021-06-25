@@ -10,6 +10,7 @@ const Santri = require("../models/Santri");
 const { isValidObjectId } = require("mongoose");
 const ObjectId = require("mongoose").Types.ObjectId;
 const Admin = require("../models/Admin");
+const toISOLocal = require("../utils/toISOLocal");
 dotenv.config();
 
 const login = async (req, res, next) => {
@@ -49,6 +50,7 @@ const createSantri = async (req, res, next) => {
   try {
     const body = req.body;
     if (
+      !req.file ||
       !body.username ||
       !body.password ||
       !body.email ||
@@ -59,8 +61,7 @@ const createSantri = async (req, res, next) => {
       !body.address ||
       !body.phone_number ||
       !body.parent_name ||
-      !body.parent_phone_number ||
-      !body.level
+      !body.parent_phone_number
     ) {
       return next(new Error("Please fill out the fields"));
     }
@@ -80,7 +81,7 @@ const createSantri = async (req, res, next) => {
       return next(new Error("Fields Error"));
     }
     const date = new Date();
-    body.date_in = date.toISOString();
+    body.date_in = toISOLocal(date);
     body.level = body.level ? 1 : 0;
     body.image = req.file.path;
     body.gender = req.body.gender === "1";
@@ -101,51 +102,16 @@ const createSantri = async (req, res, next) => {
   }
 };
 
-const updateSantri = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const body = req.body;
-    if (!isValidObjectId(id)) {
-      return next(new Error("Invalid identifier"));
-    }
-    if (
-      body._id ||
-      body.username ||
-      body.email ||
-      body.progress ||
-      body.payment
-    ) {
-      return next(new Error("Disallowed fields"));
-    }
-    if (req.file) {
-      body.image = req.file.path;
-    }
-    const updatedSantri = await Santri.findOneAndUpdate(
-      { _id: id },
-      { ...body },
-      { useFindAndModify: false }
-    );
-    if (!updatedSantri) {
-      return next(new Error("Cannot update"));
-    }
-    fs.unlinkSync(path.join(__dirname, `../${updatedSantri.image}`));
-    return res.json({
-      message: "success",
-    });
-  } catch (err) {
-    return next(err);
-  }
-};
-
 const getSantris = async (req, res, next) => {
   try {
     const skipper = parseInt(req.query.currentPage) || 1;
-    const limit = 10;
-    const count = await Santri.countDocuments();
+    const limit = 15;
     const { username } = req.query;
 
     if (!username || username === "") {
+      const count = await Santri.countDocuments();
       const santris = await Santri.find({}, { progress: 0, password: 0 })
+        .sort({ _id: -1 })
         .skip((skipper - 1) * limit)
         .limit(limit);
       if (santris.length < 1) {
@@ -155,14 +121,19 @@ const getSantris = async (req, res, next) => {
         message: "success",
         data: santris,
         dataLength: count,
+        prev: skipper > 1,
         next: count > skipper * limit,
       });
     }
-
+    const count = await Santri.find(
+      { username: { $regex: new RegExp(username) } },
+      { progress: 0, password: 0 }
+    ).countDocuments();
     const santris = await Santri.find(
       { username: { $regex: new RegExp(username) } },
       { progress: 0, password: 0 }
     )
+      .sort({ _id: -1 })
       .skip((skipper - 1) * limit)
       .limit(limit);
 
@@ -174,6 +145,7 @@ const getSantris = async (req, res, next) => {
       message: "success",
       data: santris,
       dataLength: count,
+      prev: skipper > 1,
       next: count > skipper * limit,
     });
   } catch (err) {
@@ -203,6 +175,49 @@ const getSantri = async (req, res, next) => {
   }
 };
 
+const updateSantri = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const body = req.body;
+    if (!isValidObjectId(id)) {
+      return next(new Error("Invalid identifier"));
+    }
+    if (
+      body._id ||
+      body.username ||
+      body.email ||
+      body.progress ||
+      body.payment ||
+      body.date_in ||
+      body.level
+    ) {
+      return next(new Error("Disallowed fields"));
+    }
+    if (body.password) {
+      body.password = await hash(body.password, 12);
+    }
+    if (req.file) {
+      body.image = req.file.path;
+    }
+    const updatedSantri = await Santri.findOneAndUpdate(
+      { _id: id },
+      { ...body },
+      { useFindAndModify: false }
+    );
+    if (!updatedSantri) {
+      return next(new Error("Cannot update"));
+    }
+    if (req.file) {
+      fs.unlinkSync(path.join(__dirname, `../${updatedSantri.image}`));
+    }
+    return res.json({
+      message: "success",
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 const deleteSantri = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -224,42 +239,12 @@ const deleteSantri = async (req, res, next) => {
 };
 
 const createPayment = async (req, res, next) => {
-  // use json
   try {
     const body = req.body;
-    if (
-      !body.title ||
-      !body.desc ||
-      !body.amount ||
-      !body.due_date ||
-      !body.ref_code ||
-      !body.is_spp ||
-      !body.group ||
-      (body.group === "specified" && !body.santri)
-    ) {
+    if (!body.title || !body.amount || !body.santri_id) {
       return next(new Error("Please fills out the fields"));
     }
-    if (body.group === "all") {
-      const getAllSantri = await Santri.find({}, { _id: 1 });
-      body.santri = [];
-      getAllSantri.map((santri) => {
-        body.santri.push({ santri_id: santri._id });
-      });
-    } else {
-      const santris = body.santri.map((s) => ObjectId(s));
-      const checkSantri = await Santri.find({ _id: { $in: santris } });
-      if (!checkSantri || !(checkSantri > 0)) {
-        return next(new Error("Some santri not found"));
-      }
-    }
-    body.is_spp = body.is_spp === "1";
     body.amount = parseInt(body.amount);
-    const checkRefCodeExist = await Payment.findOne({
-      ref_code: body.ref_code,
-    });
-    if (checkRefCodeExist) {
-      return next(new Error("Ref Code already exist"));
-    }
     const payment = new Payment({
       ...body,
     });
@@ -276,7 +261,7 @@ const createPayment = async (req, res, next) => {
 const getPayments = async (req, res, next) => {
   try {
     const skipper = parseInt(req.query.currentPage) || 1;
-    const limit = 10;
+    const limit = 15;
     const count = await Payment.countDocuments();
     const { title } = req.query;
 
@@ -292,6 +277,7 @@ const getPayments = async (req, res, next) => {
         message: "success",
         data: payments,
         dataLength: count,
+        prev: skipper > 1,
         next: count > skipper * limit,
       });
     }
@@ -302,7 +288,7 @@ const getPayments = async (req, res, next) => {
       },
       { santri: 0 }
     )
-      .sort({ _id: 1 })
+      .sort({ _id: -1 })
       .skip((skipper - 1) * limit)
       .limit(limit);
     if (payments.length < 1) {
@@ -312,6 +298,7 @@ const getPayments = async (req, res, next) => {
       message: "success",
       data: payments,
       dataLength: count,
+      prev: skipper > 1,
       next: count > skipper * limit,
     });
   } catch (err) {
@@ -325,66 +312,21 @@ const getPayment = async (req, res, next) => {
     if (!isValidObjectId(id)) {
       return next(new Error("Invalid identifier"));
     }
-    const payment = await Payment.aggregate([
-      {
-        $match: { _id: ObjectId(id) },
-      },
-      { $unwind: "$santri" },
-      {
-        $lookup: {
-          from: "santris",
-          let: {
-            santri_id: { $toObjectId: "$santri.santri_id" },
-            santri: "$santri",
-          },
-          pipeline: [
-            { $match: { $expr: { $eq: ["$_id", "$$santri_id"] } } },
-            {
-              $replaceRoot: {
-                newRoot: { $mergeObjects: ["$$santri", "$$ROOT"] },
-              },
-            },
-          ],
-          as: "santri",
-        },
-      },
-      {
-        $group: {
-          _id: "$_id",
-          title: { $first: "$title" },
-          desc: { $first: "$desc" },
-          amount: { $first: "$amount" },
-          due_date: { $first: "$due_date" },
-          ref_code: { $first: "$ref_code" },
-          is_spp: { $first: "$is_spp" },
-          is_complete: { $first: "$is_complete" },
-          santri: { $push: { $first: "$santri" } },
-        },
-      },
-      {
-        $project: {
-          title: 1,
-          desc: 1,
-          amount: 1,
-          due_date: 1,
-          ref_code: 1,
-          is_spp: 1,
-          is_complete: 1,
-          "santri.santri_id": 1,
-          "santri.name": 1,
-          "santri.image": 1,
-          "santri.payment_date": 1,
-          "santri.payment_image": 1,
-          "santri.is_complete": 1,
-        },
-      },
-    ]);
-    if (!payment) {
+    const payment = await Payment.findOne({ _id: id });
+    const santri = await Santri.findOne(
+      { _id: payment.santri_id },
+      { _id: 1, name: 1, image: 1 }
+    );
+    if (!payment || !santri) {
       return next(new Error("No payment found"));
     }
     return res.json({
       message: "success",
-      data: payment,
+      data: {
+        ...payment._doc,
+        santri_name: santri.name,
+        santri_image: santri.image,
+      },
     });
   } catch (err) {
     return next(err);
@@ -394,40 +336,24 @@ const getPayment = async (req, res, next) => {
 const verifyPayment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const body = req.body;
-    if (!body.santri) {
-      return next(new Error("Which santri need to verify?"));
-    }
-    if (!isValidObjectId(id) || !isValidObjectId(body.santri)) {
-      return next(new Error("Invalid identifier"));
-    }
-    const santri = await Santri.find({ _id: body.santri }, { _id: 1 });
-    if (!santri) {
-      return next(new Error("No santri found"));
-    }
     const payment = await Payment.findOneAndUpdate(
-      { _id: id, "santri.santri_id": body.santri },
+      { _id: id },
       {
-        $set: {
-          "santri.$.is_complete": true,
-        },
+        is_complete: true,
       },
       { useFindAndModify: false }
     );
     if (!payment) {
       return next(new Error("Failed updating payment"));
     }
-    const getSantriPayDate = payment.santri.find(
-      (s) => s.santri_id === body.santri
-    );
 
     const newTrans = new Transaction({
       title: payment.title,
       is_debit: true,
-      date: getSantriPayDate.payment_date,
+      date: toISOLocal(new Date()),
       amount: payment.amount,
-      ref_code: payment.ref_code,
     });
+
     const saveNewTrans = await newTrans.save();
     if (!saveNewTrans) {
       return next(new Error("Error in saving to transaction"));
@@ -436,8 +362,7 @@ const verifyPayment = async (req, res, next) => {
     const prevAccount = await Account.find().sort({ _id: -1 }).limit(1);
     if (
       prevAccount[0] &&
-      prevAccount[0].date.split("T")[0] ===
-        new Date().toISOString().split("T")[0]
+      prevAccount[0].date.split("T")[0] === toISOLocal(new Date()).split("T")[0]
     ) {
       const updateAccount = await Account.findOneAndUpdate(
         { _id: prevAccount[0]._id },
@@ -452,23 +377,11 @@ const verifyPayment = async (req, res, next) => {
         balance: prevAccount[0]
           ? prevAccount[0].balance + payment.amount
           : payment.amount,
-        date: new Date().toISOString(),
+        date: toISOLocal(new Date()),
       });
       const saveNewAccount = await newAccount.save();
       if (!saveNewAccount) {
         return next(new Error("Error in updating balance"));
-      }
-    }
-    const checkComplete = payment.santri.map((s) => {
-      if (!s.is_complete) {
-        return false;
-      }
-    });
-    if (checkComplete === true) {
-      payment.is_complete = true;
-      const savePayment = await payment.save();
-      if (!savePayment) {
-        return next(new Error("Error occured on saving payment"));
       }
     }
     return res.json({
@@ -482,38 +395,19 @@ const verifyPayment = async (req, res, next) => {
 const rejectPayment = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const body = req.body;
-    if (!body.santri) {
-      return next(new Error("Which santri need to vefiry?"));
-    }
-    if (!isValidObjectId(id) || !isValidObjectId(body.santri)) {
-      return next(new Error("Invalid identifier"));
-    }
-    const santri = await Santri.find({ _id: body.santri }, { _id: 1 });
-    if (!santri) {
-      return next(new Error("No santri found"));
-    }
-    const findImage = await Payment.findOne(
-      { _id: id, "santri.santri_id": body.santri },
-      { santri: { $elemMatch: { santri_id: body.santri } } }
-    );
+    const findImage = await Payment.findOne({ _id: id });
     const payment = await Payment.findOneAndUpdate(
-      { _id: id, "santri.santri_id": body.santri },
+      { _id: id },
       {
-        $set: {
-          "santri.$.is_complete": false,
-          "santri.$.payment_image": null,
-          "santri.$.payment_date": null,
-        },
+        is_complete: false,
+        image: null,
       },
       { useFindAndModify: false }
     );
     if (!payment) {
       return next(new Error("Failed updating payment"));
     }
-    fs.unlinkSync(
-      path.join(__dirname, `../${findImage.santri[0].payment_image}`)
-    );
+    fs.unlinkSync(path.join(__dirname, `../${findImage.image}`));
     return res.json({ message: payment });
   } catch (err) {
     return next(err);
@@ -527,7 +421,7 @@ const createTransaction = async (req, res, next) => {
       return next(new Error("Please fills out the fields"));
     }
     body.amount = parseInt(body.amount);
-    const account = await Account.find().sort({ _id: 1 }).limit(1);
+    const account = await Account.find().sort({ _id: -1 }).limit(1);
     if (body.is_debit !== 1) {
       if (
         account.length < 1 ||
@@ -539,7 +433,7 @@ const createTransaction = async (req, res, next) => {
     const transaction = new Transaction({
       title: body.title,
       is_debit: body.is_debit === 1,
-      date: new Date().toISOString(),
+      date: toISOLocal(new Date()),
       amount: body.amount,
     });
     const saveTransaction = await transaction.save();
@@ -548,7 +442,7 @@ const createTransaction = async (req, res, next) => {
     }
     if (
       account[0] &&
-      account[0].date.split("T")[0] === new Date().toISOString().split("T")[0]
+      account[0].date.split("T")[0] === toISOLocal(new Date()).split("T")[0]
     ) {
       const updater = {
         balance:
@@ -576,13 +470,14 @@ const createTransaction = async (req, res, next) => {
       };
       const newAccount = new Account({
         ...updater,
-        date: new Date().toISOString(),
+        date: toISOLocal(new Date()),
       });
       const saveNewAccount = await newAccount.save();
       if (!saveNewAccount) {
         const deleteTransaction = await saveTransaction.delete();
         return next(new Error("Cannot save to account"));
       }
+      return res.json({ message: "success" });
     }
   } catch (err) {
     return next(err);
@@ -592,11 +487,11 @@ const createTransaction = async (req, res, next) => {
 const getTransactions = async (req, res, next) => {
   try {
     const skipper = parseInt(req.query.currentPage) || 1;
-    const limit = 10;
-    const count = await Transaction.countDocuments();
+    const limit = 15;
     const { title } = req.query;
 
     if (!title || title === "") {
+      const count = await Transaction.countDocuments();
       const transactions = await Transaction.find()
         .sort({ _id: -1 })
         .skip((skipper - 1) * limit)
@@ -608,10 +503,14 @@ const getTransactions = async (req, res, next) => {
         message: "success",
         data: transactions,
         dataLength: count,
+        prev: skipper > 1,
         next: count > skipper * limit,
       });
     }
 
+    const count = await Transaction.find({
+      title: { $regex: new RegExp(title) },
+    }).countDocuments();
     const transactions = await Transaction.find({
       title: { $regex: new RegExp(title) },
     })
@@ -625,6 +524,7 @@ const getTransactions = async (req, res, next) => {
       message: "success",
       data: transactions,
       dataLength: count,
+      prev: skipper > 1,
       next: count > skipper * limit,
     });
   } catch (err) {
@@ -662,7 +562,7 @@ const getBalance = async (req, res, next) => {
         });
       }
     } else {
-      const accounts = await Account.find().limit(10);
+      const accounts = await Account.find().limit(15);
       if (accounts.length > 0) {
         return res.json({
           message: "success",

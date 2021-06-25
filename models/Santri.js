@@ -25,33 +25,14 @@ const Santri = new Schema({
         ayat: String,
       },
     ],
-    kitab: [
+    jamaah: [
       {
         creator_id: String,
-        name: String,
-        max_page: Number,
+        kind: String,
         date: String,
-        current_page: Number,
+        is_attend: Boolean,
       },
     ],
-    attendance: {
-      jamaah: [
-        {
-          creator_id: String,
-          kind: String,
-          date: String,
-          is_attend: Boolean,
-        },
-      ],
-      ngaji: [
-        {
-          creator_id: String,
-          kind: String,
-          date: String,
-          is_attend: Boolean,
-        },
-      ],
-    },
     achievement: [
       {
         creator_id: String,

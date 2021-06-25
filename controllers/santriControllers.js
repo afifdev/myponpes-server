@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { compare } = require("bcrypt");
 const Santri = require("../models/Santri");
 const dotenv = require("dotenv");
+const Event = require("../models/Event");
 const Payment = require("../models/Payment");
 const { isValidObjectId } = require("mongoose");
 dotenv.config();
@@ -39,6 +40,105 @@ const login = async (req, res, next) => {
   }
 };
 
+const getMySelf = async (req, res, next) => {
+  const santri = await Santri.findOne(
+    { username: req.body.authUsername },
+    { progress: 0 }
+  );
+  return res.json({ message: "success", data: santri });
+};
+
+const getHafalan = async (req, res, next) => {
+  try {
+    const hafalan = await Santri.findOne(
+      {
+        username: req.body.authUsername,
+      },
+      { "progress.hafalan": 1 }
+    );
+    return res.json({ message: "success", data: hafalan });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getJamaah = async (req, res, next) => {
+  try {
+    const time = req.query.t;
+    if (["subuh", "duhur", "asar", "maghrib", "isya"].includes(time)) {
+      const jamaah = await Santri.findOne(
+        {
+          username: req.body.authUsername,
+          "progress.jamaah": { $elemMatch: { kind: time } },
+        },
+        { "progress.jamaah": 1 }
+      );
+      return res.json({ message: "success", data: jamaah });
+    }
+    const jamaah = await Santri.findOne(
+      {
+        username: req.body.authUsername,
+      },
+      { "progress.jamaah": 1 }
+    );
+    return res.json({ message: "success", data: jamaah });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getAchievement = async (req, res, next) => {
+  try {
+    const achievement = await Santri.findOne(
+      { username: req.body.authUsername },
+      { "progress.achievement": 1 }
+    );
+    return res.json({ message: "success", data: achievement });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getEvents = async (req, res, next) => {
+  try {
+    const skipper = parseInt(req.query.currentPage) || 1;
+    const limit = 8;
+    const me = await Santri.findOne(
+      { username: req.body.authUsername },
+      { _id: 1 }
+    );
+    const count = await Event.find().countDocuments();
+    const event = await Event.find()
+      .sort({ _id: -1 })
+      .skip((skipper - 1) * limit)
+      .limit(limit);
+    if (event.length < 1) {
+      return next(new Error("Event not found"));
+    }
+    return res.json({
+      message: "success",
+      data: event,
+      dataLength: count,
+      prev: skipper > 1,
+      next: count > skipper * limit,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getReturning = async (req, res, next) => {
+  try {
+    const returning = await Santri.findOne(
+      { username: req.body.authUsername },
+      { "progress.returning": 1 }
+    );
+    return res.json({ message: "success", data: returning });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 const getPayments = async (req, res, next) => {
   try {
     const santri = await Santri.findOne({ username: req.body.authUsername });
@@ -47,18 +147,7 @@ const getPayments = async (req, res, next) => {
     const count = await Payment.countDocuments();
     const { title } = req.query;
     if (!title || title === "") {
-      const payments = await Payment.find(
-        { "santri.santri_id": santri._id },
-        {
-          title: 1,
-          desc: 1,
-          amount: 1,
-          due_date: 1,
-          ref_code: 1,
-          is_spp: 1,
-          santri: { $elemMatch: { santri_id: santri._id } },
-        }
-      )
+      const payments = await Payment.find({ santri_id: santri._id })
         .skip((skipper - 1) * limit)
         .limit(limit);
       if (payments.length < 1) {
@@ -72,21 +161,10 @@ const getPayments = async (req, res, next) => {
       });
     }
 
-    const payments = await Payment.find(
-      {
-        "santri.santri_id": santri._id,
-        title: { $regex: new RegExp(title) },
-      },
-      {
-        title: 1,
-        desc: 1,
-        amount: 1,
-        due_date: 1,
-        ref_code: 1,
-        is_spp: 1,
-        santri: { $elemMatch: { santri_id: santri._id } },
-      }
-    )
+    const payments = await Payment.find({
+      santri_id: santri._id,
+      title: { $regex: new RegExp(title) },
+    })
       .skip((skipper - 1) * limit)
       .limit(limit);
     if (payments.length < 1) {
@@ -110,19 +188,8 @@ const getPayment = async (req, res, next) => {
       return next(new Error("Invalid identifier"));
     }
     const santri = await Santri.findOne({ username: req.body.authUsername });
-    const payment = await Payment.findOne(
-      { _id: id, "santri.santri_id": santri._id },
-      {
-        title: 1,
-        desc: 1,
-        amount: 1,
-        due_date: 1,
-        ref_code: 1,
-        is_spp: 1,
-        santri: { $elemMatch: { santri_id: santri._id } },
-      }
-    );
-    if (!payment) {
+    const payment = await Payment.findOne({ _id: id, santri_id: santri._id });
+    if (!payment || !santri) {
       return next(new Error("Payment not found"));
     }
     return res.json({
@@ -143,15 +210,11 @@ const updatePayment = async (req, res, next) => {
     return next(new Error("Image should inserted"));
   }
   const imagePath = req.file.path;
-  const date = new Date().toISOString().split("T")[0];
   const santri = await Santri.findOne({ username: req.body.authUsername });
   const payment = await Payment.findOneAndUpdate(
-    { _id: id, "santri.santri_id": santri._id },
+    { _id: id, santri_id: santri._id },
     {
-      $set: {
-        "santri.$.payment_image": imagePath,
-        "santri.$.payment_date": date,
-      },
+      image: imagePath,
     },
     { useFindAndModify: false }
   );
@@ -163,6 +226,12 @@ const updatePayment = async (req, res, next) => {
 
 module.exports = {
   login,
+  getMySelf,
+  getHafalan,
+  getEvents,
+  getJamaah,
+  getAchievement,
+  getReturning,
   getPayments,
   getPayment,
   updatePayment,

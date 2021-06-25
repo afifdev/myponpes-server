@@ -5,7 +5,7 @@ const Event = new Schema({
   category: String,
   desc: String,
   date: String,
-  santri_id: String,
+  creator_id: String,
   images: [],
 });
 
